@@ -109,6 +109,8 @@ class MoviesViewController: UIViewController, UITableViewDelegate, UITableViewDa
     let searchController = UISearchController(searchResultsController: nil)
     var filmsNowPlaying: [Film] = []
     var filmsPopular: [Film] = []
+    var searchFilmsNowPlaying: [Film] = []
+    var searchFilmsPopular: [Film] = []
     var searching = false
     
     let movieAPI = MovieDBAPI()
@@ -116,6 +118,9 @@ class MoviesViewController: UIViewController, UITableViewDelegate, UITableViewDa
     override func viewDidLoad() {
         super.viewDidLoad()
         
+        let refreshControl = UIRefreshControl()
+        
+        tableView.refreshControl = refreshControl
         tableView.delegate = self
         tableView.dataSource = self
         searchController.searchBar.delegate = self
@@ -170,13 +175,13 @@ class MoviesViewController: UIViewController, UITableViewDelegate, UITableViewDa
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         if section == 0{
             if searching{
-                return 2
+                return self.searchFilmsPopular.count
             }else{
                 return self.filmsPopular.count
             }
         }else{
             if searching{
-                return 2
+                return self.searchFilmsNowPlaying.count
             }else{
                 return self.filmsNowPlaying.count
             }
@@ -188,9 +193,20 @@ class MoviesViewController: UIViewController, UITableViewDelegate, UITableViewDa
         
         if indexPath.section == 1{
             if searching {
-                cell?.titleCell.text = "2"
-                cell?.textCell.text = "2"
-                cell?.starsCell.text = "2"
+                let film = searchFilmsNowPlaying[indexPath.row]
+                let url = URL(string: "https://image.tmdb.org/t/p/w500\(film.posterPath)")
+                
+                DispatchQueue.global().async {
+                    let data = try? Data(contentsOf: url!) //make sure your image in this url does exist, otherwise unwrap in a if let check / try-catch
+                    DispatchQueue.main.async {
+                        cell?.imageCell.image = UIImage(data: data!)
+                        cell?.imageCell.layer.cornerRadius = 15
+                    }
+                }
+                
+                cell?.titleCell.text = film.title
+                cell?.textCell.text = film.overview
+                cell?.starsCell.text = "􀋂 " + String(film.voteAverage)
             }else{
                 let film = filmsNowPlaying[indexPath.row]
                 let url = URL(string: "https://image.tmdb.org/t/p/w500\(film.posterPath)")
@@ -209,9 +225,20 @@ class MoviesViewController: UIViewController, UITableViewDelegate, UITableViewDa
             }
         }else{
             if searching {
-                cell?.titleCell.text = "2"
-                cell?.textCell.text = "2"
-                cell?.starsCell.text = "2"
+                let film = searchFilmsPopular[indexPath.row]
+                let url = URL(string: "https://image.tmdb.org/t/p/w500\(film.posterPath)")
+                
+                DispatchQueue.global().async {
+                    let data = try? Data(contentsOf: url!) //make sure your image in this url does exist, otherwise unwrap in a if let check / try-catch
+                    DispatchQueue.main.async {
+                        cell?.imageCell.image = UIImage(data: data!)
+                        cell?.imageCell.layer.cornerRadius = 15
+                    }
+                }
+                
+                cell?.titleCell.text = film.title
+                cell?.textCell.text = film.overview
+                cell?.starsCell.text = "􀋂 " + String(film.voteAverage)
             }else{
                 let film = filmsPopular[indexPath.row]
                 let url = URL(string: "https://image.tmdb.org/t/p/w500\(film.posterPath)")
@@ -238,8 +265,22 @@ class MoviesViewController: UIViewController, UITableViewDelegate, UITableViewDa
     
     func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
         searching = true
+        searchFilmsPopular = []
+        searchFilmsNowPlaying = []
         if searchBar.text == ""{
             searching = false
+        }else{
+            for film in filmsPopular {
+                if film.title.lowercased().prefix(searchText.count) == searchText.lowercased() {
+                    searchFilmsPopular.append(film)
+                }
+            }
+            
+            for film in filmsNowPlaying {
+                if film.title.lowercased().prefix(searchText.count) == searchText.lowercased() {
+                    searchFilmsNowPlaying.append(film)
+                }
+            }
         }
         tableView.reloadData()
     }
@@ -247,6 +288,8 @@ class MoviesViewController: UIViewController, UITableViewDelegate, UITableViewDa
     func searchBarCancelButtonClicked(_ searchBar: UISearchBar) {
         searching = false
         searchBar.text = ""
+        searchFilmsPopular = []
+        searchFilmsNowPlaying = []
         tableView.reloadData()
     }
 }
