@@ -10,12 +10,13 @@ import UIKit
 struct Film: CustomStringConvertible{
     let id: Int
     let title: String
-    let posterPath: String
+    let image: UIImage
     let overview: String
     let voteAverage: Double
+    let genres: [Int]
     
     var description: String {
-        return "ID: \(id), Title: \(title), Poster path: \(posterPath), Overview: \(overview), Vote: \(voteAverage) \n"
+        return "ID: \(id), Title: \(title), Overview: \(overview), Vote: \(voteAverage) \n"
     }
 }
 
@@ -41,15 +42,20 @@ struct MovieDBAPI{
             }
             
             var localFilms: [Film] = []
-            
+
             for filmDictionary in films {
                 guard let id = filmDictionary["id"] as? Int,
                     let title = filmDictionary["title"] as? String,
                     let posterPath = filmDictionary["poster_path"] as? String,
                     let overview = filmDictionary["overview"] as? String,
-                    let voteAverage = filmDictionary["vote_average"] as? Double
+                    let voteAverage = filmDictionary["vote_average"] as? Double,
+                    let genres = filmDictionary["genre_ids"] as? [Int],
+                    let url = URL(string: "https://image.tmdb.org/t/p/w500\(posterPath)"),
+                    let data = try? Data(contentsOf: url),
+                    let image = UIImage(data: data)
                 else { continue }
-                let film = Film(id: id, title: title, posterPath: posterPath, overview: overview, voteAverage: voteAverage)
+                
+                let film = Film(id: id, title: title, image: image, overview: overview, voteAverage: voteAverage, genres: genres)
                 localFilms.append(film)
                 
             }
@@ -68,9 +74,8 @@ struct MovieDBAPI{
         let url = URL(string: urlString)!
         
         URLSession.shared.dataTask(with:  url) { (data, response, error) in
-            
+
             typealias RMFilm = [String: Any]
-            
             guard let data = data,
                   let json = try? JSONSerialization.jsonObject(with: data, options: .fragmentsAllowed),
                   let dictionary = json as? [String: Any],
@@ -87,9 +92,15 @@ struct MovieDBAPI{
                     let title = filmDictionary["title"] as? String,
                     let posterPath = filmDictionary["poster_path"] as? String,
                     let overview = filmDictionary["overview"] as? String,
-                    let voteAverage = filmDictionary["vote_average"] as? Double
+                    let voteAverage = filmDictionary["vote_average"] as? Double,
+                    let genres = filmDictionary["genre_ids"] as? [Int],
+                    let url = URL(string: "https://image.tmdb.org/t/p/w500\(posterPath)"),
+                    let data = try? Data(contentsOf: url),
+                    let image = UIImage(data: data)
                 else { continue }
-                let film = Film(id: id, title: title, posterPath: posterPath, overview: overview, voteAverage: voteAverage)
+                
+                
+                let film = Film(id: id, title: title, image: image, overview: overview, voteAverage: voteAverage, genres: genres)
                 localFilms.append(film)
                 
             }
@@ -112,6 +123,9 @@ class MoviesViewController: UIViewController, UITableViewDelegate, UITableViewDa
     var searchFilmsNowPlaying: [Film] = []
     var searchFilmsPopular: [Film] = []
     var searching = false
+    var page: Int = 2
+    var lineSelected: Int?
+    var sectionSelected: Int?
     
     let movieAPI = MovieDBAPI()
     
@@ -132,14 +146,6 @@ class MoviesViewController: UIViewController, UITableViewDelegate, UITableViewDa
         
         navigationController?.navigationBar.prefersLargeTitles = true
         
-        movieAPI.requestNowPlaying{ (films) in
-            self.filmsNowPlaying = films
-            
-            DispatchQueue.main.async {
-                self.tableView.reloadData()
-            }
-        }
-        
         movieAPI.requestPopularMovies{ (films) in
             self.filmsPopular = films
             
@@ -148,10 +154,20 @@ class MoviesViewController: UIViewController, UITableViewDelegate, UITableViewDa
             }
         }
         
+        movieAPI.requestNowPlaying{ (films) in
+            self.filmsNowPlaying = films
+            
+            DispatchQueue.main.async {
+                self.tableView.reloadData()
+            }
+        }
+        
+        
     }
     
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
-        tableView.deselectRow(at: indexPath, animated: false)
+        lineSelected = indexPath.row
+        sectionSelected = indexPath.section
     }
     
     func numberOfSections(in tableView: UITableView) -> Int {
@@ -194,31 +210,17 @@ class MoviesViewController: UIViewController, UITableViewDelegate, UITableViewDa
         if indexPath.section == 1{
             if searching {
                 let film = searchFilmsNowPlaying[indexPath.row]
-                let url = URL(string: "https://image.tmdb.org/t/p/w500\(film.posterPath)")
                 
-                DispatchQueue.global().async {
-                    let data = try? Data(contentsOf: url!) //make sure your image in this url does exist, otherwise unwrap in a if let check / try-catch
-                    DispatchQueue.main.async {
-                        cell?.imageCell.image = UIImage(data: data!)
-                        cell?.imageCell.layer.cornerRadius = 15
-                    }
-                }
-                
+                cell?.imageCell.image = film.image
+                cell?.imageCell.layer.cornerRadius = 15
                 cell?.titleCell.text = film.title
                 cell?.textCell.text = film.overview
                 cell?.starsCell.text = "􀋂 " + String(film.voteAverage)
             }else{
                 let film = filmsNowPlaying[indexPath.row]
-                let url = URL(string: "https://image.tmdb.org/t/p/w500\(film.posterPath)")
                 
-                DispatchQueue.global().async {
-                    let data = try? Data(contentsOf: url!) //make sure your image in this url does exist, otherwise unwrap in a if let check / try-catch
-                    DispatchQueue.main.async {
-                        cell?.imageCell.image = UIImage(data: data!)
-                        cell?.imageCell.layer.cornerRadius = 15
-                    }
-                }
-                
+                cell?.imageCell.image = film.image
+                cell?.imageCell.layer.cornerRadius = 15
                 cell?.titleCell.text = film.title
                 cell?.textCell.text = film.overview
                 cell?.starsCell.text = "􀋂 " + String(film.voteAverage)
@@ -226,31 +228,17 @@ class MoviesViewController: UIViewController, UITableViewDelegate, UITableViewDa
         }else{
             if searching {
                 let film = searchFilmsPopular[indexPath.row]
-                let url = URL(string: "https://image.tmdb.org/t/p/w500\(film.posterPath)")
                 
-                DispatchQueue.global().async {
-                    let data = try? Data(contentsOf: url!) //make sure your image in this url does exist, otherwise unwrap in a if let check / try-catch
-                    DispatchQueue.main.async {
-                        cell?.imageCell.image = UIImage(data: data!)
-                        cell?.imageCell.layer.cornerRadius = 15
-                    }
-                }
-                
+                cell?.imageCell.image = film.image
+                cell?.imageCell.layer.cornerRadius = 15
                 cell?.titleCell.text = film.title
                 cell?.textCell.text = film.overview
                 cell?.starsCell.text = "􀋂 " + String(film.voteAverage)
             }else{
                 let film = filmsPopular[indexPath.row]
-                let url = URL(string: "https://image.tmdb.org/t/p/w500\(film.posterPath)")
                 
-                DispatchQueue.global().async {
-                    let data = try? Data(contentsOf: url!) //make sure your image in this url does exist, otherwise unwrap in a if let check / try-catch
-                    DispatchQueue.main.async {
-                        cell?.imageCell.image = UIImage(data: data!)
-                        cell?.imageCell.layer.cornerRadius = 12
-                    }
-                }
-                
+                cell?.imageCell.image = film.image
+                cell?.imageCell.layer.cornerRadius = 15
                 cell?.titleCell.text = film.title
                 cell?.textCell.text = film.overview
                 cell?.starsCell.text = "􀋂 " + String(film.voteAverage)
@@ -261,6 +249,19 @@ class MoviesViewController: UIViewController, UITableViewDelegate, UITableViewDa
     
     func tableView(_ tableView: UITableView, heightForHeaderInSection section: Int) -> CGFloat {
         return 60.0
+    }
+    
+    func tableView(_ tableView: UITableView, willDisplay cell: UITableViewCell, forRowAt indexPath: IndexPath) {
+        
+        if (indexPath.section == 1 && indexPath.row == filmsNowPlaying.count - 10) {
+            movieAPI.requestNowPlaying(page: self.page){ (films) in
+                self.filmsNowPlaying.append(contentsOf: films)
+                self.page += 1
+                DispatchQueue.main.async {
+                    self.tableView.reloadData()
+                }
+            }
+        }
     }
     
     func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
@@ -292,4 +293,19 @@ class MoviesViewController: UIViewController, UITableViewDelegate, UITableViewDa
         searchFilmsNowPlaying = []
         tableView.reloadData()
     }
+    
+    override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
+        
+        let detailsView = segue.destination as? DetailsViewController
+        
+        lineSelected = tableView.indexPathForSelectedRow?.row
+        sectionSelected = tableView.indexPathForSelectedRow?.section
+        
+        if sectionSelected == 0{
+            detailsView?.film = self.filmsPopular[lineSelected!]
+        }else{
+            detailsView?.film = self.filmsNowPlaying[lineSelected!]
+        }
+    }
+    
 }
