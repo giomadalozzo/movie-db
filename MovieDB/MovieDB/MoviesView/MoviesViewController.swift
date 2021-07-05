@@ -20,7 +20,43 @@ struct Film: CustomStringConvertible{
     }
 }
 
+struct Genres {
+    let id: Int
+    let genre: String
+}
+
 struct MovieDBAPI{
+    
+    func requestGenres(completionHandler: @escaping ([Genres]) -> Void) {
+        let urlString = "https://api.themoviedb.org/3/genre/movie/list?api_key=1b312813cf6df1bf51d1ada49057b17d&language=en-US"
+        let url = URL(string: urlString)!
+    
+        URLSession.shared.dataTask(with: url) { (data, response, error) in
+            guard let data = data,
+                  let json = try? JSONSerialization.jsonObject(with: data, options: .fragmentsAllowed),
+                  let dictionary = json as? [String: Any],
+                  let genres = dictionary["genres"] as? [[String: Any]]
+            else {
+                completionHandler([])
+                return
+            }
+            
+            var localGenres: [Genres] = []
+            
+            for genreDictionary in genres {
+                guard let id = genreDictionary["id"] as? Int,
+                      let genre = genreDictionary["name"] as? String
+                else { continue }
+                
+                let genres = Genres(id: id, genre: genre)
+                localGenres.append(genres)
+            }
+            
+//            print(genres)
+            completionHandler(localGenres)
+        }
+        .resume()
+    }
     
     func requestNowPlaying(page: Int = 1, completionHandler: @escaping ([Film]) -> Void) {
         if page < 1 {fatalError("The page should be bigger than 1")}
@@ -118,10 +154,12 @@ class MoviesViewController: UIViewController, UITableViewDelegate, UITableViewDa
     @IBOutlet weak var tableView: UITableView!
     
     let searchController = UISearchController(searchResultsController: nil)
+    let refreshControl = UIRefreshControl()
     var filmsNowPlaying: [Film] = []
     var filmsPopular: [Film] = []
     var searchFilmsNowPlaying: [Film] = []
     var searchFilmsPopular: [Film] = []
+    var genres: [Genres] = []
     var searching = false
     var page: Int = 2
     var lineSelected: Int?
@@ -132,12 +170,12 @@ class MoviesViewController: UIViewController, UITableViewDelegate, UITableViewDa
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        let refreshControl = UIRefreshControl()
-        
+        tableView.isHidden = true
         tableView.refreshControl = refreshControl
         tableView.delegate = self
         tableView.dataSource = self
         searchController.searchBar.delegate = self
+        refreshControl.addTarget(self, action: #selector(refreshTable(_:)), for: .valueChanged)
         
         navigationItem.searchController = searchController
         navigationItem.searchController?.automaticallyShowsCancelButton = false
@@ -145,6 +183,10 @@ class MoviesViewController: UIViewController, UITableViewDelegate, UITableViewDa
         navigationItem.hidesSearchBarWhenScrolling = false
         
         navigationController?.navigationBar.prefersLargeTitles = true
+        
+        movieAPI.requestGenres{ (genres) in
+            self.genres = genres
+        }
         
         movieAPI.requestPopularMovies{ (films) in
             self.filmsPopular = films
@@ -159,9 +201,9 @@ class MoviesViewController: UIViewController, UITableViewDelegate, UITableViewDa
             
             DispatchQueue.main.async {
                 self.tableView.reloadData()
+                self.tableView.isHidden = false
             }
         }
-        
         
     }
     
@@ -215,7 +257,7 @@ class MoviesViewController: UIViewController, UITableViewDelegate, UITableViewDa
                 cell?.imageCell.layer.cornerRadius = 15
                 cell?.titleCell.text = film.title
                 cell?.textCell.text = film.overview
-                cell?.starsCell.text = "􀋂 " + String(film.voteAverage)
+                cell?.starsCell.text = String(film.voteAverage)
             }else{
                 let film = filmsNowPlaying[indexPath.row]
                 
@@ -223,7 +265,7 @@ class MoviesViewController: UIViewController, UITableViewDelegate, UITableViewDa
                 cell?.imageCell.layer.cornerRadius = 15
                 cell?.titleCell.text = film.title
                 cell?.textCell.text = film.overview
-                cell?.starsCell.text = "􀋂 " + String(film.voteAverage)
+                cell?.starsCell.text = String(film.voteAverage)
             }
         }else{
             if searching {
@@ -233,7 +275,8 @@ class MoviesViewController: UIViewController, UITableViewDelegate, UITableViewDa
                 cell?.imageCell.layer.cornerRadius = 15
                 cell?.titleCell.text = film.title
                 cell?.textCell.text = film.overview
-                cell?.starsCell.text = "􀋂 " + String(film.voteAverage)
+                cell?.starCell.image = UIImage(systemName: "star")
+                cell?.starsCell.text = String(film.voteAverage)
             }else{
                 let film = filmsPopular[indexPath.row]
                 
@@ -241,7 +284,8 @@ class MoviesViewController: UIViewController, UITableViewDelegate, UITableViewDa
                 cell?.imageCell.layer.cornerRadius = 15
                 cell?.titleCell.text = film.title
                 cell?.textCell.text = film.overview
-                cell?.starsCell.text = "􀋂 " + String(film.voteAverage)
+                cell?.starCell.image = UIImage(systemName: "star")
+                cell?.starsCell.text = String(film.voteAverage)
             }
         }
         return cell!
@@ -294,6 +338,30 @@ class MoviesViewController: UIViewController, UITableViewDelegate, UITableViewDa
         tableView.reloadData()
     }
     
+    @objc private func refreshTable(_ sender: Any) {
+        fetchTableData()
+    }
+    
+    private func fetchTableData() {
+        movieAPI.requestPopularMovies{ (films) in
+            self.filmsPopular = films
+            
+            DispatchQueue.main.async {
+                self.tableView.reloadData()
+            }
+        }
+        
+        movieAPI.requestNowPlaying{ (films) in
+            self.filmsNowPlaying = films
+            
+            DispatchQueue.main.async {
+                self.tableView.reloadData()
+                self.refreshControl.endRefreshing()
+            }
+        }
+    }
+
+
     override func prepare(for segue: UIStoryboardSegue, sender: Any?) {
         
         let detailsView = segue.destination as? DetailsViewController
@@ -303,8 +371,10 @@ class MoviesViewController: UIViewController, UITableViewDelegate, UITableViewDa
         
         if sectionSelected == 0{
             detailsView?.film = self.filmsPopular[lineSelected!]
+            detailsView?.genres = self.genres
         }else{
             detailsView?.film = self.filmsNowPlaying[lineSelected!]
+            detailsView?.genres = self.genres
         }
     }
     

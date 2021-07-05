@@ -12,6 +12,8 @@ class DetailsViewController: UIViewController, UITableViewDelegate, UITableViewD
     @IBOutlet weak var tableView: UITableView!
     
     var film: Film?
+    var genres: [Genres] = []
+    var stringGenres: String?
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -19,6 +21,7 @@ class DetailsViewController: UIViewController, UITableViewDelegate, UITableViewD
         tableView.delegate = self
         tableView.dataSource = self
         
+        self.stringGenres = generateGenresString(genres: film!.genres)
     }
     
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
@@ -32,6 +35,8 @@ class DetailsViewController: UIViewController, UITableViewDelegate, UITableViewD
             cell?.imageCell.layer.cornerRadius = 20
             cell?.titleCell.text = self.film?.title
             cell?.starCell.image = UIImage(systemName: "star")
+            cell?.starsCell.text = String(self.film!.voteAverage)
+            cell?.genresCell.text = self.stringGenres
             
             return cell!
         }else{
@@ -43,6 +48,21 @@ class DetailsViewController: UIViewController, UITableViewDelegate, UITableViewD
             
             return cell!
         }
+    }
+    
+    func generateGenresString(genres: [Int]) -> String {
+        var string: String = ""
+        
+        for genreID in genres{
+            for genre in self.genres{
+                if genre.id == genreID {
+                    string = string + genre.genre + ", "
+                }
+            }
+        }
+        var stringOutput = String(string.dropLast().dropLast())
+        
+        return stringOutput
     }
 
 }
